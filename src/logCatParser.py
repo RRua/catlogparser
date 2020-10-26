@@ -12,6 +12,17 @@ LOG_LEVELS = {
     "S": "silent"
 }
 
+ERROR_TYPES= {
+	"NoRelease" : "Resource acquired not released",
+	"Exception": "Exception occured during run",
+	"ResourceLeak": "Resource has leaked",
+	"NoProviderInfo": "Failed to find provider info",
+	"Unknown": "Not catalogued error",
+	
+
+
+}
+
 def getFormatRegex(log_format):
 		# https://developer.android.com/studio/command-line/logcat#outputFormat
 		return {
@@ -20,15 +31,39 @@ def getFormatRegex(log_format):
 	    }[log_format]
 
 
-class ErrorStats(object):
+
+
+class LogStats(object):
 	def __init__(self):
 		self.stats = {}
 		for level in LOG_LEVELS.values():
 			self.stats[level]=0
+		self.errors={}
+		for erro in ERROR_TYPES.keys():
+			self.errors[erro]=0
 
 	def updateStat(self,obj):
 		if "level" in obj:
 			self.stats[obj["level"]]+=1
+		if obj["level"]=="error":
+			error_type = self.inferErrorType(obj)
+			self.errors[error_type]+=1
+
+	def inferErrorType(self,obj):
+		is_no_release= re.search(r'resource was acquired .* never released', obj["message"])
+		if is_no_release:
+			return "NoRelease"
+		is_exception= re.search(r'xception', obj["message"]+obj["tag"])
+		if is_exception:
+			return "Exception"
+		is_resource_leak= re.search(r'has leaked', obj["message"])
+		if is_resource_leak:
+			return "ResourceLeak"
+		is_no_provider = re.search(r'Failed to find provider info', obj["message"])
+		if is_no_provider:
+			return "NoProviderInfo"
+		else:
+			return "Unknown"
 
 class LogCatParser(object):
 	def __init__(self,log_format, filepath ):
@@ -36,7 +71,7 @@ class LogCatParser(object):
 		self.format_regex = getFormatRegex(log_format)
 		self.filepath = filepath
 		self.parsedLines=[]
-		self.stats=ErrorStats()
+		self.stats=LogStats()
 
 	def mergeLines(self,line_obj_to_merge):
 		self.parsedLines[-1]["message"] += "\n"+line_obj_to_merge["message"]
@@ -87,16 +122,14 @@ class LogCatParser(object):
 			if x:
 				parsed_obj = self.buildLogLine(x.groups())
 				self.addParsedLine(parsed_obj)
-
-		print( json.dumps( self.parsedLines,  indent=4) )
-
+	
 if __name__== "__main__":
 	if len(sys.argv) > 1:
 		filepath=sys.argv[1]
 		log_format= sys.argv[2] if len (sys.argv)>2 else "threadtime"
 		parser = LogCatParser(log_format,filepath)
 		parser.parseFile()
-		print(parser.stats.stats)
+		print(parser.stats.errors)
 
 	else:
 		print ("ERROR: at least one arg required <filename> (<logformat>)? )")
