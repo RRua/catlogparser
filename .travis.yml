@@ -8,3 +8,7 @@ install:
 # command to run tests
 script: 
   python -m pytest src/tests/test.py 
+
+notifications:
+  email:
+    - rui.a.rua@inesctec.pt
