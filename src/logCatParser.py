@@ -19,8 +19,6 @@ ERROR_TYPES= {
 	"NoProviderInfo": "Failed to find provider info",
 	"Unknown": "Not catalogued error",
 	
-
-
 }
 
 def getFormatRegex(log_format):
@@ -29,9 +27,6 @@ def getFormatRegex(log_format):
 	        "threadtime": "^(\d{2}\-\d{2}) (\d\d:\d\d:\d\d\.\d+)\s*(\d+)\s*(\d+)\s([VDIWEAF])\s(.*)?:(.*)?$",
 	    	#"brief": "([VDIWEAF])\/([^)]{0,23})?\\(\\s*(?<pid>\\d+)\\):\\s+(?<message>.*)$"
 	    }[log_format]
-
-
-
 
 class LogStats(object):
 	def __init__(self):
@@ -123,13 +118,20 @@ class LogCatParser(object):
 				parsed_obj = self.buildLogLine(x.groups())
 				self.addParsedLine(parsed_obj)
 
+	def printParserInfo(self):
+		obj={}
+		obj["errors"] = self.stats.errors
+		obj["stats"] = self.stats.stats
+		obj["logs"] = self.parsedLines
+		print(json.dumps(obj,indent=1))
+
 if __name__== "__main__":
 	if len(sys.argv) > 1:
 		filepath=sys.argv[1]
 		log_format= sys.argv[2] if len (sys.argv)>2 else "threadtime"
 		parser = LogCatParser(log_format,filepath)
 		parser.parseFile()
-		print(parser.stats.errors)
+		parser.printParserInfo()
 
 	else:
 		print ("ERROR: at least one arg required <filename> (<logformat>)? )")
