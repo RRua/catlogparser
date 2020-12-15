@@ -24,7 +24,7 @@ ERROR_TYPES= {
 def getFormatRegex(log_format):
 		# https://developer.android.com/studio/command-line/logcat#outputFormat
 		return {
-	        "threadtime": "^(\d{2}\-\d{2}) (\d\d:\d\d:\d\d\.\d+)\s*(\d+)\s*(\d+)\s([VDIWEAF])\s(.*)?:(.*)?$",
+	        "threadtime": "^(\d{2}\-\d{2}) (\d\d:\d\d:\d\d\.\d+)\s*(\d+)\s*(\d+)\s([VDIWEAF])\s([^:]*):\s+(.*)?$",
 	    	#"brief": "([VDIWEAF])\/([^)]{0,23})?\\(\\s*(?<pid>\\d+)\\):\\s+(?<message>.*)$"
 	    }[log_format]
 
@@ -34,8 +34,12 @@ class LogStats(object):
 		for level in LOG_LEVELS.values():
 			self.stats[level]=0
 		self.errors={}
+		self.warns={}
 		for erro in ERROR_TYPES.keys():
 			self.errors[erro]=0
+			self.warns[erro]=0
+		self.warn_tags={}
+		self.error_tags={}
 
 	def updateStat(self,obj):
 		if "level" in obj:
@@ -43,6 +47,17 @@ class LogStats(object):
 		if obj["level"]=="error":
 			error_type = self.inferErrorType(obj)
 			self.errors[error_type]+=1
+			if obj["tag"] in self.error_tags:
+				self.error_tags[obj["tag"]]+=1
+			else:
+				self.error_tags[obj["tag"]]=1
+		elif obj["level"]=="warn":
+			error_type = self.inferErrorType(obj)
+			if obj["tag"] in self.warn_tags:
+				self.warn_tags[obj["tag"]]+=1
+			else:
+				self.warn_tags[obj["tag"]]=1
+			self.warns[error_type]+=1
 
 	def inferErrorType(self,obj):
 		is_no_release= re.search(r'resource was acquired .* never released', obj["message"])
@@ -95,11 +110,10 @@ class LogCatParser(object):
 			log_obj['pid']    = log_line_groups[2]
 			log_obj['tid']    = log_line_groups[3]
 			log_obj['level']  = LOG_LEVELS[ log_line_groups[4] ]
-			log_obj['tag']    = log_line_groups[5]
+			log_obj['tag']    = log_line_groups[5].strip()
 			log_obj['message'] = log_line_groups[6]
 		
 		return log_obj
-
 
 	def addParsedLine(self,parsed_obj):
 		if self.canMergeLines(parsed_obj):
@@ -108,7 +122,6 @@ class LogCatParser(object):
 			self.parsedLines.append( parsed_obj)
 			self.stats.updateStat(parsed_obj)
 	
-
 	def parseFile(self):
 		regex= getFormatRegex(self.log_format)
 		f = open(self.filepath, "r")
@@ -121,6 +134,9 @@ class LogCatParser(object):
 	def printParserInfo(self):
 		obj={}
 		obj["errors"] = self.stats.errors
+		obj["error_tags"] = self.stats.error_tags
+		obj["warns"] = self.stats.warns
+		obj["warn_tags"] = self.stats.warn_tags
 		obj["stats"] = self.stats.stats
 		obj["logs"] = self.parsedLines
 		print(json.dumps(obj,indent=1))
