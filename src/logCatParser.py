@@ -1,22 +1,26 @@
 import os,sys,re, json
+import argparse
 
 LOG_LEVELS = { 
 	# according to http://developer.android.com/tools/debugging/debugging-log.html
-    "V": "verbose",
-    "D": "debug",
-    "I": "info",
-    "W": "warn",
-    "E": "error",
-    "A": "assert",
-    "F": "fatal",
-    "S": "silent"
+	"V": "verbose",
+	"D": "debug",
+	"I": "info",
+	"W": "warn",
+	"E": "error",
+	"A": "assert",
+	"F": "fatal",
+	"S": "silent"
 }
 
 ERROR_TYPES= {
-	"NoRelease" : "Resource acquired not released",
+	"NoRelease" : r"Resource acquired .* not released",
 	"Exception": "Exception occured during run",
 	"ResourceLeak": "Resource has leaked",
 	"NoProviderInfo": "Failed to find provider info",
+	"ANR" : "Application is not responding",
+	"ProcessCrash" : "process crashing",
+	"JavaException" : "Exception",
 	"Unknown": "Not catalogued error",
 	
 }
@@ -24,56 +28,42 @@ ERROR_TYPES= {
 def getFormatRegex(log_format):
 		# https://developer.android.com/studio/command-line/logcat#outputFormat
 		return {
-	        "threadtime": "^(\d{2}\-\d{2}) (\d\d:\d\d:\d\d\.\d+)\s*(\d+)\s*(\d+)\s([VDIWEAF])\s([^:]*):\s+(.*)?$",
-	    	#"brief": "([VDIWEAF])\/([^)]{0,23})?\\(\\s*(?<pid>\\d+)\\):\\s+(?<message>.*)$"
-	    }[log_format]
+			"threadtime": "^(\d{2}\-\d{2}) (\d\d:\d\d:\d\d\.\d+)\s*(\d+)\s*(\d+)\s([VDIWEAF])\s([^:]*):\s+(.*)?$",
+			#"brief": "([VDIWEAF])\/([^)]{0,23})?\\(\\s*(?<pid>\\d+)\\):\\s+(?<message>.*)$"
+		}[log_format]
 
 class LogStats(object):
 	def __init__(self):
 		self.stats = {}
+		self.levels = {}
+		self.know_errors={}
 		for level in LOG_LEVELS.values():
-			self.stats[level]=0
-		self.errors={}
-		self.warns={}
+			self.stats[level]=0	
+			self.levels[level]={}
 		for erro in ERROR_TYPES.keys():
-			self.errors[erro]=0
-			self.warns[erro]=0
-		self.warn_tags={}
-		self.error_tags={}
-
+			self.know_errors[erro]=0
+	
 	def updateStat(self,obj):
-		if "level" in obj:
-			self.stats[obj["level"]]+=1
-		if obj["level"]=="error":
-			error_type = self.inferErrorType(obj)
-			self.errors[error_type]+=1
-			if obj["tag"] in self.error_tags:
-				self.error_tags[obj["tag"]]+=1
-			else:
-				self.error_tags[obj["tag"]]=1
-		elif obj["level"]=="warn":
-			error_type = self.inferErrorType(obj)
-			if obj["tag"] in self.warn_tags:
-				self.warn_tags[obj["tag"]]+=1
-			else:
-				self.warn_tags[obj["tag"]]=1
-			self.warns[error_type]+=1
+		if "level" not in obj:
+			return
+		self.stats[obj["level"]]+=1
+		error_type = self.inferErrorType(obj)
+		if error_type != "Unknown":
+			self.know_errors[error_type]+=1
+
+		if obj["tag"] in self.levels[obj["level"]]:
+			self.levels[obj["level"]][obj["tag"]]+=1
+		else:
+			self.levels[obj["level"]][obj["tag"]]=1
+
+		
+
 
 	def inferErrorType(self,obj):
-		is_no_release= re.search(r'resource was acquired .* never released', obj["message"])
-		if is_no_release:
-			return "NoRelease"
-		is_exception= re.search(r'xception', obj["message"]+obj["tag"])
-		if is_exception:
-			return "Exception"
-		is_resource_leak= re.search(r'has leaked', obj["message"])
-		if is_resource_leak:
-			return "ResourceLeak"
-		is_no_provider = re.search(r'Failed to find provider info', obj["message"])
-		if is_no_provider:
-			return "NoProviderInfo"
-		else:
-			return "Unknown"
+		for e, m in ERROR_TYPES.items():
+			if re.search(m, obj['message']) or m in str(obj['message']) :
+				return e
+		return "Unknown"
 
 class LogCatParser(object):
 	def __init__(self,log_format, filepath ):
@@ -90,7 +80,7 @@ class LogCatParser(object):
 		if len(self.parsedLines)==0:
 			return False
 		last_parsed_line_id = self.getLogLineID( self.parsedLines[-1])
-		return last_parsed_line_id == self.getLogLineID (log_line_obj)
+		return last_parsed_line_id == self.getLogLineID(log_line_obj)
 
 
 	def getLogLineID(self,log_line_obj):
@@ -119,8 +109,10 @@ class LogCatParser(object):
 		if self.canMergeLines(parsed_obj):
 			self.mergeLines( parsed_obj )
 		else:
-			self.parsedLines.append( parsed_obj)
-			self.stats.updateStat(parsed_obj)
+			if len(self.parsedLines)>0:
+				self.stats.updateStat(self.parsedLines[-1]) 
+			self.parsedLines.append(parsed_obj)
+			
 	
 	def parseFile(self):
 		regex= getFormatRegex(self.log_format)
@@ -130,26 +122,23 @@ class LogCatParser(object):
 			if x:
 				parsed_obj = self.buildLogLine(x.groups())
 				self.addParsedLine(parsed_obj)
+		self.stats.updateStat(parsed_obj)
 
 	def printParserInfo(self):
 		obj={}
-		obj["errors"] = self.stats.errors
-		obj["error_tags"] = self.stats.error_tags
-		obj["warns"] = self.stats.warns
-		obj["warn_tags"] = self.stats.warn_tags
+		obj["know_errors"] = self.stats.know_errors
+		for k,v in self.stats.levels.items():
+			if len(v)>0:
+				obj[k+"s"] = v
 		obj["stats"] = self.stats.stats
 		obj["logs"] = self.parsedLines
 		print(json.dumps(obj,indent=1))
 
 if __name__== "__main__":
-	if len(sys.argv) > 1:
-		filepath=sys.argv[1]
-		log_format= sys.argv[2] if len (sys.argv)>2 else "threadtime"
-		parser = LogCatParser(log_format,filepath)
-		parser.parseFile()
-		parser.printParserInfo()
-
-	else:
-		print ("ERROR: at least one arg required <filename> (<logformat>)? )")
-
-
+	parser = argparse.ArgumentParser()
+	parser.add_argument('path',metavar='path', type=str, help='filepath')
+	parser.add_argument("-f", "--format", type=str, help="provide log format", default="threadtime")
+	args = parser.parse_args()
+	parser = LogCatParser(args.format,args.path)
+	parser.parseFile()
+	parser.printParserInfo()
