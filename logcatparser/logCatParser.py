@@ -1,5 +1,4 @@
-import os,sys,re, json
-import argparse
+import re, json
 
 LOG_LEVELS = {
 	# according to http://developer.android.com/tools/debugging/debugging-log.html
@@ -15,32 +14,33 @@ LOG_LEVELS = {
 
 ERROR_TYPES = {
 	"NoRelease": r"Resource acquired .* not released",
-	"Exception": "Exception occured during run",
+	"Exception": "Exception occurred during run",
 	"ResourceLeak": "Resource has leaked",
 	"NoProviderInfo": "Failed to find provider info",
 	"ANR": "Application is not responding",
 	"ProcessCrash": "process crashing",
 	"JavaException": "Exception",
 	"Unknown": "Not catalogued error",
-
 }
+
 
 def getFormatRegex(log_format):
 		# https://developer.android.com/studio/command-line/logcat#outputFormat
 		return {
-			"threadtime": "^(\d{2}\-\d{2}) (\d\d:\d\d:\d\d\.\d+)\s*(\d+)\s*(\d+)\s([VDIWEAF])\s([^:]*):\s+(.*)?$",
+			"threadtime": r'^(\d{2}\-\d{2}) (\d\d:\d\d:\d\d\.\d+)\s*(\d+)\s*(\d+)\s([VDIWEAF])\s([^:]*):\s+(.*)?$',
 			#"brief": "([VDIWEAF])\/([^)]{0,23})?\\(\\s*(?<pid>\\d+)\\):\\s+(?<message>.*)$"
 		}[log_format]
+
 
 class LogStats(object):
 	def __init__(self):
 		self.stats = {}
 		self.levels = {}
-		self.know_errors={}
+		self.know_errors = {}
 		self.know_errors_indexes = {}
 		for level in LOG_LEVELS.values():
-			self.stats[level]=0
-			self.levels[level]={}
+			self.stats[level] = 0
+			self.levels[level] = {}
 		for erro in ERROR_TYPES.keys():
 			self.know_errors[erro] = 0
 			self.know_errors_indexes[erro] = set()
@@ -50,7 +50,7 @@ class LogStats(object):
 			return
 		self.stats[obj["level"]] += 1
 		error_type = self.inferErrorType(obj)
-		if error_type != "Unknown":
+		if error_type != "Unknown" and idx not in self.know_errors_indexes[error_type]:
 			self.know_errors[error_type] += 1
 			self.know_errors_indexes[error_type].add(idx)
 
@@ -75,17 +75,17 @@ class LogCatParser(object):
 		self.parsedLines = []
 		self.stats = LogStats()
 
-	def mergeLines(self,line_obj_to_merge):
+	def merge_lines(self, line_obj_to_merge):
 		self.parsedLines[-1]["message"] += "\n"+line_obj_to_merge["message"]
 
-	def canMergeLines(self,log_line_obj):
+	def can_merge_lines(self, log_line_obj):
 		if len(self.parsedLines) == 0:
 			return False
-		last_parsed_line_id = self.getLogLineID( self.parsedLines[-1])
-		return last_parsed_line_id == self.getLogLineID(log_line_obj)
+		last_parsed_line_id = self.get_log_line_ID(self.parsedLines[-1])
+		return last_parsed_line_id == self.get_log_line_ID(log_line_obj)
 
 
-	def getLogLineID(self,log_line_obj):
+	def get_log_line_ID(self, log_line_obj):
 		date = "" if "date" not in log_line_obj else log_line_obj["date"]
 		time = "" if "time" not in log_line_obj else log_line_obj["time"]
 		pid = "" if "pid" not in log_line_obj else log_line_obj["pid"]
@@ -93,7 +93,7 @@ class LogCatParser(object):
 		level = "" if "level" not in log_line_obj else log_line_obj["level"]
 		return date+time+pid+tid+level
 
-	def buildLogLine(self, log_line_groups):
+	def build_log_line(self, log_line_groups):
 		log_obj = {}
 		if self.log_format == "threadtime":
 			log_obj['date'] = log_line_groups[0]
@@ -105,26 +105,26 @@ class LogCatParser(object):
 			log_obj['message'] = log_line_groups[6]
 		return log_obj
 
-	def addParsedLine(self, parsed_obj):
-		if self.canMergeLines(parsed_obj):
-			self.mergeLines(parsed_obj)
+	def add_parsed_line(self, parsed_obj):
+		if self.can_merge_lines(parsed_obj):
+			self.merge_lines(parsed_obj)
 		else:
 			if len(self.parsedLines) > 0:
 				self.stats.updateStat(self.parsedLines[-1], len(self.parsedLines)-1)
 			self.parsedLines.append(parsed_obj)
 
 
-	def parseFile(self):
+	def parse_file(self):
 		regex = getFormatRegex(self.log_format)
 		f = open(self.filepath, "r")
 		for  line in f.readlines():
 			match = re.search("%s" % regex, line)
 			if match:
-				parsed_obj = self.buildLogLine(match.groups())
-				self.addParsedLine(parsed_obj)
+				parsed_obj = self.build_log_line(match.groups())
+				self.add_parsed_line(parsed_obj)
 				self.stats.updateStat(parsed_obj, len(self.parsedLines)-1)
 
-	def printParserInfo(self):
+	def print_parser_info(self):
 		obj = {"know_errors": self.stats.know_errors}
 		for k,v in self.stats.levels.items():
 			if len(v)>0:
@@ -165,17 +165,4 @@ class LogCatParser(object):
 			print(f"error. error \"{error}\" not in {ERROR_TYPES.keys()}")
 			return []
 		return list(map(lambda x: self.parsedLines[x], self.stats.know_errors_indexes[error]))
-
-def main():
-	parser = argparse.ArgumentParser()
-	parser.add_argument('path', metavar='path', type=str, help='filepath')
-	parser.add_argument("-f", "--format", type=str, help="provide log format", default="threadtime", choices=['threadtime'])
-	parser.add_argument("-o", "--output", type=str, help="output format", choices=["json"])
-	args = parser.parse_args()
-	parser = LogCatParser(args.format, args.path)
-	parser.parseFile()
-	print(parser.get_logs_of_level("error"))
-
-if __name__ == "__main__":
-		main()
 
