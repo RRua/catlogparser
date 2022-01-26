@@ -66,6 +66,7 @@ class LogStats(object):
 				return e
 		return "Unknown"
 
+
 class LogCatParser(object):
 	def __init__(self, log_format, filepath ):
 		self.log_format = log_format
@@ -78,7 +79,7 @@ class LogCatParser(object):
 		self.parsedLines[-1]["message"] += "\n"+line_obj_to_merge["message"]
 
 	def canMergeLines(self,log_line_obj):
-		if len(self.parsedLines)==0:
+		if len(self.parsedLines) == 0:
 			return False
 		last_parsed_line_id = self.getLogLineID( self.parsedLines[-1])
 		return last_parsed_line_id == self.getLogLineID(log_line_obj)
@@ -87,9 +88,9 @@ class LogCatParser(object):
 	def getLogLineID(self,log_line_obj):
 		date = "" if "date" not in log_line_obj else log_line_obj["date"]
 		time = "" if "time" not in log_line_obj else log_line_obj["time"]
-		pid  = "" if "pid" not in log_line_obj else log_line_obj["pid"]
-		tid  = "" if "tid" not in log_line_obj else log_line_obj["tid"]
-		level  = "" if "level" not in log_line_obj else log_line_obj["level"]
+		pid = "" if "pid" not in log_line_obj else log_line_obj["pid"]
+		tid = "" if "tid" not in log_line_obj else log_line_obj["tid"]
+		level = "" if "level" not in log_line_obj else log_line_obj["level"]
 		return date+time+pid+tid+level
 
 	def buildLogLine(self, log_line_groups):
