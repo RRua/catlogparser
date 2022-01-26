@@ -8,7 +8,7 @@ with open('requirements.txt') as f:
     required = f.read().splitlines()
 
 setup(
-    name='logcatparser',
+    name='pylogcatparser',
     description='LogCatParser: A simple Android logcat parser',
     long_description=long_description,
     long_description_content_type='text/markdown',
