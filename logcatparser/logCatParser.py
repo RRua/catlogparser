@@ -45,11 +45,11 @@ class LogStats(object):
 			self.know_errors[erro] = 0
 			self.know_errors_indexes[erro] = set()
 
-	def updateStat(self, obj, idx):
+	def update_stat(self, obj, idx):
 		if "level" not in obj:
 			return
 		self.stats[obj["level"]] += 1
-		error_type = self.inferErrorType(obj)
+		error_type = self.infer_error_type(obj)
 		if error_type != "Unknown" and idx not in self.know_errors_indexes[error_type]:
 			self.know_errors[error_type] += 1
 			self.know_errors_indexes[error_type].add(idx)
@@ -59,19 +59,17 @@ class LogStats(object):
 		else:
 			self.levels[obj["level"]][obj["tag"]] = 1
 
-
-	def inferErrorType(self,obj):
+	def infer_error_type(self, obj):
 		for e, m in ERROR_TYPES.items():
-			if re.search(m, obj['message']) or m in str(obj['message']) :
+			if re.search(m, obj['message']) or m in str(obj['message']):
 				return e
 		return "Unknown"
 
 
 class LogCatParser(object):
-	def __init__(self, log_format, filepath ):
+	def __init__(self, log_format):
 		self.log_format = log_format
 		self.format_regex = getFormatRegex(log_format)
-		self.filepath = filepath
 		self.parsedLines = []
 		self.stats = LogStats()
 
@@ -83,7 +81,6 @@ class LogCatParser(object):
 			return False
 		last_parsed_line_id = self.get_log_line_ID(self.parsedLines[-1])
 		return last_parsed_line_id == self.get_log_line_ID(log_line_obj)
-
 
 	def get_log_line_ID(self, log_line_obj):
 		date = "" if "date" not in log_line_obj else log_line_obj["date"]
@@ -100,7 +97,7 @@ class LogCatParser(object):
 			log_obj['time'] = log_line_groups[1]
 			log_obj['pid'] = log_line_groups[2]
 			log_obj['tid'] = log_line_groups[3]
-			log_obj['level'] = LOG_LEVELS[ log_line_groups[4] ]
+			log_obj['level'] = LOG_LEVELS[log_line_groups[4]]
 			log_obj['tag'] = log_line_groups[5].strip()
 			log_obj['message'] = log_line_groups[6]
 		return log_obj
@@ -110,28 +107,27 @@ class LogCatParser(object):
 			self.merge_lines(parsed_obj)
 		else:
 			if len(self.parsedLines) > 0:
-				self.stats.updateStat(self.parsedLines[-1], len(self.parsedLines)-1)
+				self.stats.update_stat(self.parsedLines[-1], len(self.parsedLines)-1)
 			self.parsedLines.append(parsed_obj)
 
-
-	def parse_file(self):
+	def parse_file(self, filepath):
 		regex = getFormatRegex(self.log_format)
-		f = open(self.filepath, "r")
-		for  line in f.readlines():
+		f = open(filepath, "r")
+		for line in f.readlines():
 			match = re.search("%s" % regex, line)
 			if match:
 				parsed_obj = self.build_log_line(match.groups())
 				self.add_parsed_line(parsed_obj)
-				self.stats.updateStat(parsed_obj, len(self.parsedLines)-1)
+				self.stats.update_stat(parsed_obj, len(self.parsedLines)-1)
 
-	def print_parser_info(self):
+	def get_parser_resume(self):
 		obj = {"know_errors": self.stats.know_errors}
-		for k,v in self.stats.levels.items():
-			if len(v)>0:
+		for k, v in self.stats.levels.items():
+			if len(v) > 0:
 				obj[k+"s"] = v
 		obj["stats"] = self.stats.stats
 		obj["logs"] = self.parsedLines
-		print(json.dumps(obj, indent=1))
+		return obj
 
 	def has_fatal_error(self):
 		return self.stats.stats["fatal"] > 0
@@ -166,3 +162,6 @@ class LogCatParser(object):
 			return []
 		return list(map(lambda x: self.parsedLines[x], self.stats.know_errors_indexes[error]))
 
+	def save_results(self, output_json_path):
+		with open(output_json_path, 'w') as jj:
+			json.dump(self.get_parser_resume(), jj)
