@@ -121,7 +121,7 @@ class LogCatParser(object):
 				self.stats.update_stat(parsed_obj, len(self.parsedLines)-1)
 
 	def get_parser_resume(self):
-		obj = {"know_errors": self.stats.know_errors}
+		obj = {"known_errors": self.stats.know_errors}
 		for k, v in self.stats.levels.items():
 			if len(v) > 0:
 				obj[k+"s"] = v

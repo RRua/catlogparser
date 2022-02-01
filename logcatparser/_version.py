@@ -7,5 +7,5 @@ Provides logcatparser version information.
 
 from incremental import Version
 
-__version__ = Version("logcatparser", 0, 2, 3)
+__version__ = Version("logcatparser", 0, 2, 4)
 __all__ = ["__version__"]
