@@ -62,7 +62,8 @@ class LogStats(object):
 	def infer_error_type(self, obj):
 		for e, m in ERROR_TYPES.items():
 			if re.search(m, obj['message']) or m in str(obj['message']):
-				return e
+				if e == "JavaException" and not "mExceptions" in obj['message']:
+					return e
 		return "Unknown"
 
 
@@ -80,15 +81,16 @@ class LogCatParser(object):
 		if len(self.parsedLines) == 0:
 			return False
 		last_parsed_line_id = self.get_log_line_ID(self.parsedLines[-1])
+		#print(last_parsed_line_id)
 		return last_parsed_line_id == self.get_log_line_ID(log_line_obj)
 
 	def get_log_line_ID(self, log_line_obj):
 		date = "" if "date" not in log_line_obj else log_line_obj["date"]
-		time = "" if "time" not in log_line_obj else log_line_obj["time"]
+		half_time = "" if "time" not in log_line_obj else log_line_obj["time"].split(".")[0]
 		pid = "" if "pid" not in log_line_obj else log_line_obj["pid"]
 		tid = "" if "tid" not in log_line_obj else log_line_obj["tid"]
 		level = "" if "level" not in log_line_obj else log_line_obj["level"]
-		return date+time+pid+tid+level
+		return date+half_time+pid+tid+level
 
 	def build_log_line(self, log_line_groups):
 		log_obj = {}
@@ -104,6 +106,7 @@ class LogCatParser(object):
 
 	def add_parsed_line(self, parsed_obj):
 		if self.can_merge_lines(parsed_obj):
+
 			self.merge_lines(parsed_obj)
 		else:
 			if len(self.parsedLines) > 0:
@@ -118,15 +121,16 @@ class LogCatParser(object):
 			if match:
 				parsed_obj = self.build_log_line(match.groups())
 				self.add_parsed_line(parsed_obj)
-				self.stats.update_stat(parsed_obj, len(self.parsedLines)-1)
+				#self.stats.update_stat(parsed_obj, len(self.parsedLines)-1)
 
-	def get_parser_resume(self):
+	def get_parser_resume(self, include_logs=False):
 		obj = {"known_errors": self.stats.know_errors}
 		for k, v in self.stats.levels.items():
 			if len(v) > 0:
 				obj[k+"s"] = v
 		obj["stats"] = self.stats.stats
-		obj["logs"] = self.parsedLines
+		if include_logs:
+			obj["logs"] = self.parsedLines
 		return obj
 
 	def has_fatal_error(self):
@@ -162,6 +166,6 @@ class LogCatParser(object):
 			return []
 		return list(map(lambda x: self.parsedLines[x], self.stats.know_errors_indexes[error]))
 
-	def save_results(self, output_json_path):
+	def save_results(self, output_json_path, include_logs=False):
 		with open(output_json_path, 'w') as jj:
-			json.dump(self.get_parser_resume(), jj)
+			json.dump(self.get_parser_resume(include_logs=include_logs), jj)
