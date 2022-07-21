@@ -115,13 +115,14 @@ class LogCatParser(object):
 
 	def parse_file(self, filepath):
 		regex = getFormatRegex(self.log_format)
-		f = open(filepath, "r")
+		f = open(filepath, "r", errors='ignore')
 		for line in f.readlines():
 			match = re.search("%s" % regex, line)
 			if match:
 				parsed_obj = self.build_log_line(match.groups())
 				self.add_parsed_line(parsed_obj)
 				#self.stats.update_stat(parsed_obj, len(self.parsedLines)-1)
+		f.close()
 
 	def get_parser_resume(self, include_logs=False):
 		obj = {"known_errors": self.stats.know_errors}
